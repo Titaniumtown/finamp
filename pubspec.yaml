@@ -179,6 +179,7 @@ dependencies:
       ref: c1bd562a83791c12b681d2161ce77d8af58b34de
   diacritic: ^0.1.6
   mini_music_visualizer: ^1.1.4
+  http_image_provider: ^1.1.0
 
 dev_dependencies:
   flutter_test:

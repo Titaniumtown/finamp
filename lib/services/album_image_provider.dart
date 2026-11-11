@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get_it/get_it.dart';
+import 'package:http_image_provider/http_image_provider.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path_helper;
 import 'package:path_provider/path_provider.dart';
@@ -18,6 +19,7 @@ import '../models/jellyfin_models.dart';
 import 'downloads_service.dart';
 import 'finamp_settings_helper.dart';
 import 'jellyfin_api_helper.dart';
+import 'server_http_client.dart';
 
 final albumImageProviderLogger = Logger("AlbumImageProvider");
 
@@ -164,13 +166,7 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
       // Temporary result for the frame or so the cache loads
       return AlbumImageInfo(null, request, null, fullQuality: true);
     } else {
-      // Allow drawing albums up to 4X intrinsic size by setting scale
-      return AlbumImageInfo(
-        CachedImage(NetworkImage(imageUrl.toString(), scale: 0.25), key),
-        request,
-        imageUrl,
-        fullQuality: request.fullQuality,
-      );
+      return AlbumImageInfo(thumbnailImage(imageUrl, key), request, imageUrl, fullQuality: request.fullQuality);
     }
   }
 
@@ -187,6 +183,11 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
   return AlbumImageInfo(out, request, Uri.file(downloadedImage.path), fullQuality: request.fullQuality);
 });
 
+/// Loads a thumbnail from the server and stores it in the image cache under [cacheKey].
+/// A scale of 0.25 lets it be drawn up to four times larger than its actual size.
+CachedImage thumbnailImage(Uri url, String cacheKey) =>
+    CachedImage(HttpImageProvider(url, scale: 0.25, client: ServerHttpClient.instance), cacheKey);
+
 class CachedImage extends ImageProvider<CachedImage> {
   CachedImage(ImageProvider base, this.cacheKey) : _base = base;
 
@@ -195,19 +196,35 @@ class CachedImage extends ImageProvider<CachedImage> {
   final String? cacheKey;
 
   double get scale => switch (_base) {
-    NetworkImage() => _base.scale,
+    HttpImageProvider() => _base.scale,
     FileImage() => _base.scale,
     _ => throw UnsupportedError("Unsupported base image provider $_base"),
   };
 
   String get location => switch (_base) {
-    NetworkImage() => _base.url,
+    HttpImageProvider() => _base.url.toString(),
     FileImage() => _base.file.path,
     _ => throw UnsupportedError("Unsupported base image provider $_base"),
   };
 
+  /// If the image fails to load, remove it from the image cache so that it is downloaded
+  /// again the next time it is shown. Otherwise the error would stay until the app
+  /// restarts. The wrapped provider only removes its own cache entry, not this one.
   @override
-  ImageStreamCompleter loadImage(CachedImage key, ImageDecoderCallback decode) => _base.loadImage(key._base, decode);
+  ImageStreamCompleter loadImage(CachedImage key, ImageDecoderCallback decode) {
+    final completer = _base.loadImage(key._base, decode);
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (_, _) => completer.removeListener(listener),
+      onError: (_, _) {
+        completer.removeListener(listener);
+        // Wait until the image cache has stored the image before removing it.
+        scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+      },
+    );
+    completer.addListener(listener);
+    return completer;
+  }
 
   @override
   Future<CachedImage> obtainKey(ImageConfiguration configuration) => SynchronousFuture<CachedImage>(this);
