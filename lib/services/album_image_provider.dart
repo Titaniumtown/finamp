@@ -69,7 +69,24 @@ final Map<String?, AlbumImageRequest> albumRequestsCache = {};
 // the cached file actually exists when transitioning between non-precached items with identical images.
 final Map<String?, FileInfo?> _playerImageCache = {};
 
-final _imageCache = DefaultCacheManager();
+/// Downloads full-size player covers. It downloads at most two at a time, so other
+/// requests can still get a connection while covers are being prefetched.
+FileService coverFileService() => HttpFileService(httpClient: ServerHttpClient.instance)..concurrentFetches = 2;
+
+final _imageCache = CacheManager(Config(DefaultCacheManager.key, fileService: coverFileService()));
+
+/// Downloads a player cover. If the download fails, for example because the network
+/// changed, it tries once more.
+Future<FileInfo> downloadCover(CacheManager cache, String url, {String? key}) async {
+  try {
+    return await cache.downloadFile(url, key: key);
+  } catch (error) {
+    albumImageProviderLogger.info("Retrying cover download after: $error");
+    // Right after a failure, the cache manager still remembers the failed download and
+    // would return the same error again. Passing force makes it download the file again.
+    return cache.downloadFile(url, key: key, force: true);
+  }
+}
 
 const _infiniteHeight = 999999;
 
@@ -147,7 +164,7 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
       // If we want full quality player images, retrieve them via the image cache instead of linking directly.
       // In most cases, the initial null value will only be seen by the precache logic.
       Future.sync(() async {
-        FileInfo imageFile = await _imageCache.downloadFile(imageUrl.toString(), key: key);
+        FileInfo imageFile = await downloadCover(_imageCache, imageUrl.toString(), key: key);
         if (blurhashKey) {
           // The default validTill length is 7 days.  Images fetched by blurhash cannot change, as that would change the
           // blurhash, so update vaildTill to one year.
@@ -162,6 +179,8 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
           Uri.file(imageFile.file.path),
           fullQuality: true,
         );
+      }).catchError((Object error, StackTrace stack) {
+        albumImageProviderLogger.warning("Could not load player cover", error, stack);
       });
       // Temporary result for the frame or so the cache loads
       return AlbumImageInfo(null, request, null, fullQuality: true);
