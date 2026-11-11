@@ -28,6 +28,7 @@ import 'downloads_service_backend.dart';
 import 'finamp_settings_helper.dart';
 import 'finamp_user_helper.dart';
 import 'jellyfin_api.dart' as jellyfin_api;
+import 'server_http_client.dart';
 
 class JellyfinApiHelper {
   JellyfinApiHelper()
@@ -107,6 +108,8 @@ class JellyfinApiHelper {
       }
     });
 
+    ServerHttpClient.useWorkerPool();
+
     if (Platform.isAndroid) {
       // Extend the default security context to trust Android user certificates.
       // This is a workaround for <https://github.com/dart-lang/sdk/issues/50435>.
@@ -145,28 +148,17 @@ class JellyfinApiHelper {
     });
   }
 
-  static void _replaceClient(jellyfin_api.JellyfinApi api, {required bool inForeground, required bool verboseLogging}) {
-    final oldClient = api.client;
-    api.client = jellyfin_api.JellyfinApi.createClient(inForeground: inForeground, verboseLogging: verboseLogging);
-    // Chopper deliberately does not close a custom IOClient. Closing it here
-    // terminates stale keep-alive sockets and any request on the old route.
-    oldClient.dispose();
-    oldClient.httpClient.close();
-  }
-
-  /// Replaces only the Chopper transport after a network change. The same
-  /// helper is executed in the worker isolate through [runInIsolate], so no
-  /// custom control protocol is needed there.
+  /// After a network change, close the server connections in this isolate and in the
+  /// worker isolate.
   Future<void> resetNetworkConnections() async {
     _jellyfinApiHelperLogger.info("Network changed; replacing HTTP transports");
-    final verboseLogging = FinampSettingsHelper.finampSettings.verboseLogging;
-    _replaceClient(jellyfinApi, inForeground: true, verboseLogging: verboseLogging);
+    ServerHttpClient.instance.reset();
     if (_workerIsolatePort == null) return;
 
     try {
       await runInIsolate<void>((api) async {
         GetIt.instance<FinampUserHelper>().refreshCurrentUser();
-        _replaceClient(api, inForeground: false, verboseLogging: verboseLogging);
+        ServerHttpClient.instance.reset();
       }, allowForegroundFallback: false);
     } catch (error, stack) {
       _jellyfinApiHelperLogger.warning("Could not replace the background HTTP transport", error, stack);
