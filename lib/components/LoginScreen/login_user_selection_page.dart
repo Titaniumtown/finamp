@@ -4,6 +4,7 @@ import 'package:finamp/l10n/app_localizations.dart';
 import 'package:finamp/models/jellyfin_models.dart';
 import 'package:finamp/services/feedback_helper.dart';
 import 'package:finamp/services/jellyfin_api_helper.dart';
+import 'package:finamp/services/server_image.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/services.dart';
 import 'package:flutter_tabler_icons/flutter_tabler_icons.dart';
@@ -248,7 +249,7 @@ class JellyfinUserWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final avatarUrl = user != null && jellyfinApiHelper.baseUrlTemp != null
-        ? jellyfinApiHelper.getUserImageUrl(baseUrl: jellyfinApiHelper.baseUrlTemp!, user: user!)?.toString()
+        ? jellyfinApiHelper.getUserImageUrl(baseUrl: jellyfinApiHelper.baseUrlTemp!, user: user!)
         : null;
 
     const double avatarSize = 72.0;
@@ -256,7 +257,7 @@ class JellyfinUserWidget extends StatelessWidget {
     Widget getUserImage() {
       if (user != null) {
         if (avatarUrl != null) {
-          return Image.network(avatarUrl, width: avatarSize, height: avatarSize);
+          return Image(image: serverImage(avatarUrl), width: avatarSize, height: avatarSize);
         } else {
           return Container(
             decoration: BoxDecoration(
