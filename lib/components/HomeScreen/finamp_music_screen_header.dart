@@ -20,6 +20,7 @@ import 'package:finamp/services/finamp_user_helper.dart';
 import 'package:finamp/services/item_by_id_provider.dart';
 import 'package:finamp/services/jellyfin_api_helper.dart';
 import 'package:finamp/services/music_providers.dart';
+import 'package:finamp/services/server_image.dart';
 import 'package:finamp/utils/platform_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -415,13 +416,13 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                                       padding: const EdgeInsets.all(1.5),
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(9999),
-                                        child: Image.network(
-                                          GetIt.instance<JellyfinApiHelper>()
-                                              .getUserImageUrl(
-                                                baseUrl: Uri.parse(finampUserHelper.currentUser!.baseURL),
-                                                user: userInfo.value!.jellyfinUser!,
-                                              )
-                                              .toString(),
+                                        child: Image(
+                                          image: serverImage(
+                                            GetIt.instance<JellyfinApiHelper>().getUserImageUrl(
+                                              baseUrl: Uri.parse(finampUserHelper.currentUser!.baseURL),
+                                              user: userInfo.value!.jellyfinUser!,
+                                            )!,
+                                          ),
                                           fit: BoxFit.fitHeight,
                                         ),
                                       ),
