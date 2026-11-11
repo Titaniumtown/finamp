@@ -612,14 +612,16 @@ class JellyfinApiHelper {
 
   /// Fetch the public server info from a given URL.
   /// Can be used to check if the server is online / the URL is correct.
-  /// Since we're potentially looking multiple servers, while the user is entering another base URL, we use a custom http client for this request.
   Future<PublicSystemInfoResult?> loadCustomServerPublicInfo(Uri customServerUrl) async {
     assert(_verifyCallable());
-    final requestUrl = customServerUrl.replace(
-      pathSegments: customServerUrl.pathSegments.followedBy(["System", "Info", "Public"]),
-    );
-    final httpClient = ChopperClient().httpClient; // http? where we're going, we don't need http
-    final response = await httpClient.get(requestUrl);
+    return fetchPublicServerInfo(customServerUrl);
+  }
+
+  /// Fetch the public server info from [serverUrl]. This works for any server, not only
+  /// the one the user is logged in to.
+  static Future<PublicSystemInfoResult?> fetchPublicServerInfo(Uri serverUrl) async {
+    final requestUrl = serverUrl.replace(pathSegments: serverUrl.pathSegments.followedBy(["System", "Info", "Public"]));
+    final response = await ServerHttpClient.instance.get(requestUrl);
     final responseJson = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
